@@ -1,0 +1,30 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The upstream shape: the base branch writes two innocuous lines into env/env.
+      - name: Save PR number
+        if: github.event_name == 'pull_request'
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          mkdir -p ./env
+          echo PR_NUMBER=$PR_NUMBER > ./env/env
+          echo GITHUB_SHA=${{ github.sha }} >> ./env/env
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: env
+          path: env/
