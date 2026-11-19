@@ -1,0 +1,54 @@
+name: Faithful consumer
+
+# Step-for-step the shape of airbnb/lottie-android .github/workflows/post_snapshot_comment.yml:
+# there is NO `run:` step after the unzip, so BASH_ENV has nothing to hook. The only thing that
+# runs after the injected environment is applied is a Node action.
+on:
+  workflow_run:
+    workflows: [Validate]
+    types:
+      - completed
+
+jobs:
+  post-comment:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: 'Download artifact'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let allArtifacts = await github.rest.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: context.payload.workflow_run.id,
+            });
+            let matchArtifact = allArtifacts.data.artifacts.filter((artifact) => {
+              return artifact.name == "env"
+            })[0];
+            let download = await github.rest.actions.downloadArtifact({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               artifact_id: matchArtifact.id,
+               archive_format: 'zip',
+            });
+            let fs = require('fs');
+            fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/env.zip`, Buffer.from(download.data));
+
+      - name: 'Unzip artifact'
+        run: |
+          unzip env.zip
+          ls -ltR
+          while read line; do
+            echo "$line" >> $GITHUB_ENV
+          done < env
+
+      # The only step after the injection — a Node action, exactly like
+      # mshick/add-pr-comment@v2 in the upstream workflow.
+      - name: 'Post PR comment (Node action)'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.info('node action running; LD_PRELOAD=' + process.env.LD_PRELOAD)
+            core.info('node action running; NODE_OPTIONS=' + process.env.NODE_OPTIONS)
+            core.info('node action running; POC_CANARY=' + process.env.POC_CANARY)
